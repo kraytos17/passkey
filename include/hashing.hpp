@@ -2,7 +2,7 @@
 
 #include <string>
 
-struct HashingResult {
+struct HashResult {
     std::string salt;
     std::string hash;
 };
@@ -10,8 +10,8 @@ struct HashingResult {
 class Hashing {
 public:
     std::string generateSalt() const;
-    HashingResult hashMasterPassword(const std::string& password, const std::string& salt,
-                                     size_t iterations) const;
+    HashResult hashMasterPassword(const std::string& password, const std::string& salt,
+                                  size_t iterations) const;
 
     bool verifyMasterPassword(const std::string& password, const std::string& salt,
                               const std::string& storedHash) const;

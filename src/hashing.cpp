@@ -24,8 +24,8 @@ std::string Hashing::generateSalt() const {
     return oss.str();
 }
 
-HashingResult Hashing::hashMasterPassword(const std::string& password, const std::string& salt,
-                                          size_t iterations = 100000) const {
+HashResult Hashing::hashMasterPassword(const std::string& password, const std::string& salt,
+                                       size_t iterations = 100000) const {
     constexpr size_t keySize{32};
     std::array<u_char, keySize> derivedKey{};
 
@@ -40,7 +40,7 @@ HashingResult Hashing::hashMasterPassword(const std::string& password, const std
         oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
     }
 
-    return HashingResult{salt, oss.str()};
+    return HashResult{salt, oss.str()};
 }
 
 bool Hashing::verifyMasterPassword(const std::string& password, const std::string& salt,
