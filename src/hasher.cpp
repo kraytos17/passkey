@@ -1,4 +1,4 @@
-#include "../include/hashing.hpp"
+#include "../include/hasher.hpp"
 
 #include <array>
 #include <cstddef>
@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <string>
 
-std::string Hashing::generateSalt() const {
+std::string Hasher::generateSalt() {
     constexpr size_t saltSize{32};
     std::array<u_char, saltSize> salt{};
     if (!RAND_bytes(salt.data(), saltSize)) {
@@ -24,8 +24,8 @@ std::string Hashing::generateSalt() const {
     return oss.str();
 }
 
-HashResult Hashing::hashMasterPassword(const std::string& password, const std::string& salt,
-                                       size_t iterations = 100000) const {
+HashResult Hasher::hashMasterPassword(const std::string& password, const std::string& salt,
+                                      size_t iterations = 100000) {
     constexpr size_t keySize{32};
     std::array<u_char, keySize> derivedKey{};
 
@@ -43,8 +43,8 @@ HashResult Hashing::hashMasterPassword(const std::string& password, const std::s
     return HashResult{salt, oss.str()};
 }
 
-bool Hashing::verifyMasterPassword(const std::string& password, const std::string& salt,
-                                   const std::string& storedHash) const {
+bool Hasher::verifyMasterPassword(const std::string& password, const std::string& salt,
+                                  const std::string& storedHash) {
     auto computedResult = hashMasterPassword(password, salt);
     return computedResult.hash == storedHash;
 }

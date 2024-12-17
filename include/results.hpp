@@ -1,5 +1,6 @@
 #pragma once
 
+#include <openssl/aes.h>
 #include <optional>
 #include <string>
 #include <sys/types.h>
@@ -17,6 +18,9 @@ struct EncryptionResult {
         salt(std::move(s)),
         iv(std::move(i)),
         authTag(std::move(tag)) {}
+
+    std::string encodeEncryptionResult(const EncryptionResult& result);
+    EncryptionResult decodeEncryptionResult(const std::string& encodedString);
 };
 
 struct DecryptionResult {

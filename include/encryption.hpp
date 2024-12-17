@@ -5,12 +5,12 @@
 
 #include "results.hpp"
 
-class Encryption {
+class Encryption final {
 public:
-    EncryptionResult encryptPassword(const std::string& password, const std::string& key);
-    DecryptionResult decryptPassword(const std::string& encryptedPassword, const std::string& key);
-    std::array<u_char, 32> deriveKeyFromPassword(const std::string& password,
-                                                 const std::string& salt, int iterations);
+    static EncryptionResult encryptPassword(const std::string& password, const std::string& key);
+    static DecryptionResult decryptPassword(const std::string& encryptedPassword,
+                                            const std::string& key);
 
-    std::string generateSalt();
+    static std::array<u_char, 32> deriveKeyFromPassword(const std::string& password,
+                                                        const std::string& salt, int iterations);
 };

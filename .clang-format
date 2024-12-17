@@ -2,15 +2,15 @@
 Language: Cpp
 BasedOnStyle: LLVM
 AccessModifierOffset: -4
-AlignConsecutiveAssignments: false
-AlignConsecutiveDeclarations: false
-AlignOperands: true
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignOperands: Align
 AlignTrailingComments: true
 AlwaysBreakTemplateDeclarations: Yes
 BraceWrapping:
   AfterCaseLabel: false
   AfterClass: false
-  AfterControlStatement: false
+  AfterControlStatement: Never
   AfterEnum: false
   AfterFunction: false
   AfterNamespace: false
@@ -50,7 +50,7 @@ SpaceAfterCStyleCast: true
 SpaceAfterTemplateKeyword: false
 SpaceBeforeRangeBasedForLoopColon: false
 SpaceInEmptyParentheses: false
-SpacesInAngles: false
+SpacesInAngles: Never
 SpacesInConditionalStatement: false
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false

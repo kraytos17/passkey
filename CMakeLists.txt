@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_executable(passkey
     src/main.cpp
     src/encryption.cpp
-    src/hashing.cpp
+    src/hasher.cpp
     src/password_gen.cpp
     src/storage.cpp
 )

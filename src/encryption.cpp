@@ -1,32 +1,18 @@
 #include "../include/encryption.hpp"
+#include "../include/utils.hpp"
 
 #include <array>
 #include <cstddef>
-#include <iomanip>
+#include <memory>
 #include <openssl/aes.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <sstream>
 #include <vector>
 
 namespace {
-    std::vector<u_char> hexStringToBytes(const std::string& hexString) {
-        std::vector<u_char> bytes;
-        bytes.reserve(hexString.length() / 2);
-
-        for (size_t i{0}; i < hexString.length(); i += 2) {
-            auto byte = static_cast<u_char>(std::stoi(hexString.substr(i, 2), nullptr, 16));
-            bytes.push_back(byte);
-        }
-        return bytes;
-    }
-
-    std::string bytesToHexString(const std::vector<u_char>& bytes) {
-        std::ostringstream oss;
-        for (const auto& byte: bytes) {
-            oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
-        }
-        return oss.str();
+    auto makeCipherContext() {
+        return std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>(
+                EVP_CIPHER_CTX_new(), &EVP_CIPHER_CTX_free);
     }
 } // namespace
 
@@ -41,20 +27,11 @@ std::array<u_char, 32> Encryption::deriveKeyFromPassword(const std::string& pass
     return derivedKey;
 }
 
-std::string Encryption::generateSalt() {
-    constexpr size_t saltSize{32};
-    std::array<u_char, saltSize> salt{};
-    if (!RAND_bytes(salt.data(), saltSize)) {
-        throw std::runtime_error("Salt generation failed.");
-    }
-    return std::string(reinterpret_cast<char*>(salt.data()), salt.size());
-}
-
 EncryptionResult Encryption::encryptPassword(const std::string& password, const std::string& key) {
     constexpr size_t ivSize{AES_BLOCK_SIZE};
     constexpr size_t tagSize{16};
 
-    std::string salt = generateSalt();
+    std::string salt = utils::generateSalt();
     auto derivedKey = deriveKeyFromPassword(key, salt, 100000);
 
     std::array<u_char, ivSize> iv{};
@@ -62,38 +39,34 @@ EncryptionResult Encryption::encryptPassword(const std::string& password, const 
         throw std::runtime_error("IV generation failed.");
     }
 
-    auto* ctx = EVP_CIPHER_CTX_new();
+    auto ctx = makeCipherContext();
     if (!ctx) {
         throw std::runtime_error("Failed to create encryption context.");
     }
 
-    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, derivedKey.data(), iv.data()) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
+    if (EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, derivedKey.data(), iv.data()) !=
+        1) {
         throw std::runtime_error("Encryption initialization failed.");
     }
 
     std::vector<u_char> encryptedData(password.size() + AES_BLOCK_SIZE);
     int outLen{0};
-    if (EVP_EncryptUpdate(ctx, encryptedData.data(), &outLen,
+    if (EVP_EncryptUpdate(ctx.get(), encryptedData.data(), &outLen,
                           reinterpret_cast<const u_char*>(password.c_str()),
                           password.size()) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
         throw std::runtime_error("Password encryption failed.");
     }
 
     int finalLen{0};
-    if (EVP_EncryptFinal_ex(ctx, encryptedData.data() + outLen, &finalLen) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
+    if (EVP_EncryptFinal_ex(ctx.get(), encryptedData.data() + outLen, &finalLen) != 1) {
         throw std::runtime_error("Finalizing encryption failed.");
     }
 
     std::array<u_char, tagSize> authTag{};
-    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, tagSize, authTag.data()) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, tagSize, authTag.data()) != 1) {
         throw std::runtime_error("Failed to retrieve authentication tag.");
     }
 
-    EVP_CIPHER_CTX_free(ctx);
     encryptedData.resize(outLen + finalLen);
 
     return EncryptionResult{std::move(encryptedData), std::vector<u_char>(salt.begin(), salt.end()),
@@ -107,7 +80,7 @@ DecryptionResult Encryption::decryptPassword(const std::string& encryptedPasswor
     constexpr size_t ivSize{AES_BLOCK_SIZE};
     constexpr size_t tagSize{16};
 
-    auto encryptedData = hexStringToBytes(encryptedPasswordHex);
+    auto encryptedData = utils::hexStringToBytes(encryptedPasswordHex);
     if (encryptedData.size() < saltSize + ivSize + tagSize) {
         return DecryptionResult("Encrypted data too short.");
     }
@@ -121,37 +94,32 @@ DecryptionResult Encryption::decryptPassword(const std::string& encryptedPasswor
                                    encryptedData.end());
 
     auto derivedKey = deriveKeyFromPassword(key, std::string(salt.begin(), salt.end()), 100000);
-
-    auto* ctx = EVP_CIPHER_CTX_new();
+    auto ctx = makeCipherContext();
     if (!ctx) {
         return DecryptionResult("Failed to create decryption context.");
     }
 
-    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, derivedKey.data(), iv.data()) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
+    if (EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, derivedKey.data(), iv.data()) !=
+        1) {
         return DecryptionResult("Decryption initialization failed.");
     }
 
     std::vector<u_char> decryptedData(cipherText.size());
     int outLen{0};
-    if (EVP_DecryptUpdate(ctx, decryptedData.data(), &outLen, cipherText.data(),
+    if (EVP_DecryptUpdate(ctx.get(), decryptedData.data(), &outLen, cipherText.data(),
                           cipherText.size()) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
         return DecryptionResult("Decryption failed.");
     }
 
-    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tagSize, authTag.data()) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
+    if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, tagSize, authTag.data()) != 1) {
         return DecryptionResult("Failed to set authentication tag.");
     }
 
     int finalLen{0};
-    if (EVP_DecryptFinal_ex(ctx, decryptedData.data() + outLen, &finalLen) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
+    if (EVP_DecryptFinal_ex(ctx.get(), decryptedData.data() + outLen, &finalLen) != 1) {
         return DecryptionResult("Authentication failed. Invalid password or corrupted data.");
     }
 
-    EVP_CIPHER_CTX_free(ctx);
     decryptedData.resize(outLen + finalLen);
 
     return DecryptionResult(std::string(decryptedData.begin(), decryptedData.end()));
