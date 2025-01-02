@@ -282,7 +282,7 @@ pub fn export_passwords(
 ) -> Result<()> {
     let passwords = get_passwords(conn, user_id, master_password)?;
     let serialized_pw = serde_json::to_string_pretty(&passwords)?;
-    std::fs::write(file_path, serialized_pw)?;
+    std::fs::write(file_path, serialized_pw).map_err(|err| PasswordManagerError::from(err))?;
 
     Ok(())
 }

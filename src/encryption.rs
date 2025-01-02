@@ -11,7 +11,7 @@ pub const ENGINE: engine::GeneralPurpose =
     engine::GeneralPurpose::new(&alphabet::STANDARD, general_purpose::NO_PAD);
 
 /// A nonce sequence implementation that uses a 32-bit counter
-struct CounterNonceSequence(u32);
+struct CounterNonceSequence(pub u32);
 
 impl NonceSequence for CounterNonceSequence {
     fn advance(&mut self) -> Result<Nonce, Unspecified> {
@@ -20,7 +20,7 @@ impl NonceSequence for CounterNonceSequence {
 
         nonce_bytes[8..].copy_from_slice(&bytes);
         self.0 += 1;
-        
+
         Nonce::try_assume_unique_for_key(&nonce_bytes)
     }
 }
@@ -70,7 +70,10 @@ pub fn encrypt(data: &str, key: &[u8; 32]) -> Result<String, EncryptionError> {
 /// # Returns
 /// * The decrypted plaintext as a string.
 pub fn decrypt(encrypted: &str, key: &[u8; 32]) -> Result<String, EncryptionError> {
-    let mut encrypted_in_out = ENGINE.decode(encrypted)?;
+    let mut encrypted_in_out = ENGINE
+        .decode(encrypted)
+        .map_err(|e| EncryptionError::from(e))?;
+
     let unbound_key =
         UnboundKey::new(&AES_256_GCM, key).map_err(|_| EncryptionError::KeyCreation)?;
     let nonce_seq = CounterNonceSequence(1);
@@ -79,5 +82,102 @@ pub fn decrypt(encrypted: &str, key: &[u8; 32]) -> Result<String, EncryptionErro
         .open_in_place(Aad::empty(), &mut encrypted_in_out)
         .map_err(|err| EncryptionError::Decryption(err.to_string()))?;
 
-    Ok(String::from_utf8(opened_in_out.to_vec())?)
+    Ok(String::from_utf8(opened_in_out.to_vec()).map_err(|e| EncryptionError::from(e))?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ring::rand::{SecureRandom, SystemRandom};
+
+    #[test]
+    fn test_encrypt_decrypt_success() {
+        let rng = SystemRandom::new();
+        let mut test_key = [0u8; 32];
+        rng.fill(&mut test_key).unwrap();
+
+        let plaintxt = "Some plain text to encrypt";
+        println!("Plaintext:- {plaintxt}");
+
+        let encrypted = encrypt(&plaintxt, &test_key).unwrap();
+        println!("Encrypted data:- {encrypted}");
+
+        let decrypted = decrypt(&encrypted, &test_key).unwrap();
+        println!("Decrypted data:- {decrypted}");
+
+        assert_eq!(plaintxt, decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_empty_string() {
+        let rng = SystemRandom::new();
+        let mut test_key = [0u8; 32];
+        rng.fill(&mut test_key).unwrap();
+
+        let plaintxt = "";
+        println!("Plaintext:- {plaintxt}");
+
+        let encrypted = encrypt(&plaintxt, &test_key).unwrap();
+        println!("Encrypted data:- {encrypted}");
+
+        let decrypted = decrypt(&encrypted, &test_key).unwrap();
+        println!("Decrypted data:- {decrypted}");
+
+        assert_eq!(plaintxt, decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_large_string() {
+        let rng = SystemRandom::new();
+        let mut test_key = [0u8; 32];
+        rng.fill(&mut test_key).unwrap();
+
+        let plaintxt = "verylongstring".repeat(100_000);
+        let encrypted = encrypt(&plaintxt, &test_key).unwrap();
+        let decrypted = decrypt(&encrypted, &test_key).unwrap();
+
+        assert_eq!(plaintxt, decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_with_wrong_key() {
+        let rng = SystemRandom::new();
+        let mut test_key = [0u8; 32];
+        rng.fill(&mut test_key).unwrap();
+
+        let faulty_key = [0u8; 32];
+        let plaintxt = "verylongstring".repeat(100_000);
+        let encrypted = encrypt(&plaintxt, &test_key).unwrap();
+        let decrypted = decrypt(&encrypted, &faulty_key);
+
+        assert!(decrypted.is_err());
+        if let Err(err) = decrypted {
+            assert!(matches!(err, EncryptionError::Decryption(_)));
+        }
+    }
+
+    #[test]
+    fn test_decrypt_with_invalid_ciphertext() {
+        let rng = SystemRandom::new();
+        let mut key = [0u8; 32];
+        rng.fill(&mut key).unwrap();
+
+        let invalid_ciphertext = "NotBase64EncodedString";
+        let result = decrypt(invalid_ciphertext, &key);
+        println!("{result:?}");
+
+        assert!(result.is_err());
+        if let Err(err) = result {
+            assert!(matches!(err, EncryptionError::Decryption(_)));
+        }
+    }
+
+    // #[test]
+    // fn test_nonce_overflow() {
+    //     let mut nonce_sequence = CounterNonceSequence(u32::MAX);
+    //     println!("{}", nonce_sequence.0);
+    //     let nonce_result = nonce_sequence.advance();
+    //     println!("{}", nonce_sequence.0);
+    //     assert!(nonce_result.is_err());
+    // }
 }
